@@ -1,0 +1,1491 @@
+---
+title: "SRH_ML_Analysis_6_3"
+author: "Abdul_Baaki"
+date: "2025-03-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Set working directory and load relevant librabries
+```{r inatall, include=FALSE}
+setwd("C:/Users/user/Desktop/selfratedML")
+library(sjlabelled)
+library(labelled)
+library(foreign)
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(corrplot)
+library(psych)
+library(skimr)
+library(VIM)
+library(haven)
+library(xgboost)
+library(rpart)
+library(e1071)
+library(cluster)
+library(randomForest)
+library(caret)
+library(caTools)
+#install.packages("devtools")
+#devtools::install_github("martinctc/surveytoolbox")
+library(surveytoolbox)
+set.seed(1234) # For reproducibility
+```
+
+## Read SPSS dataset 
+```{r, include=FALSE}
+#path_sharedata = file.path("C:/Users/user/Desktop/self rated ML/", "sharew9_rel9-0-0_ALL_datasets_spss", "srh_ml_share_dataset.sav")
+#data_sharedata= read_sav(path_sharedata)
+path_sharedata = haven::read_sav(file = "C:/Users/user/Desktop/selfratedML/sharew9_rel9-0-0_ALL_datasets_spss/srh_ml_share_dataset.sav")
+
+str(path_sharedata)
+
+
+table(path_sharedata$country)
+#data_sharedata =haven::as_factor(path_sharedata)
+#str(data_sharedata)
+#skim(data_sharedata)
+#summary(data_sharedata)
+```
+
+
+Drop some columns
+```{r, include=FALSE}
+colnames(path_sharedata)
+
+drops = c('mergeid','bmi','hhid9','mergeidp9','coupleid9','language','bmi2','casp','cf008tot','cf016tot','euro1','euro2','euro3','euro4','euro5','euro6','euro7','euro8','euro9','euro10','euro11','euro12','eurodcat','maxgrip','numeracy','numeracy2','orienti','waveid','waveid_hh','firstwave','firstwave_hh','cvresp','deceased','mobirth','yrbirth','relrpers','hhsize','ILgroup','interview','int_year','Household moved','rel_relationtype9_1','gali','loneliness','mobilit2','mobilit3','mobility','phactiv','mobirthp','yrbirthp','agep2022','fam_resp','fin_resp','hou_resp','dn010_','ep005_','iep037_','hhmoved','hc013_','hc602_','ph003_','ph004_','ph005_','ep009_','ep037_','sphus2','age2022')
+data_sharedata_num =  path_sharedata[ , !(names(path_sharedata) %in% drops)]
+```
+
+
+```{r}
+table(is.na(data_sharedata_num$country))
+table(is.na(data_sharedata_num$adl))
+table(is.na(data_sharedata_num$adl2))
+table(is.na(data_sharedata_num$age_int))
+table(is.na(data_sharedata_num$chronic2w9))
+table(is.na(data_sharedata_num$chronicw9))
+table(is.na(data_sharedata_num$eurod))
+table(is.na(data_sharedata_num$iadl))
+table(is.na(data_sharedata_num$iadl2))
+table(is.na(data_sharedata_num$sphus))
+table(is.na(data_sharedata_num$gender))
+table(is.na(data_sharedata_num$partnerinhh))
+table(is.na(data_sharedata_num$isced1997_r))
+```
+
+```{r}
+data_sharedata_num$country %>% attr('labels')
+
+data_sharedata_num$country_new <- as_factor(data_sharedata_num$country)
+
+table(data_sharedata_num$country)
+
+
+table(data_sharedata_num$country_new)
+```
+
+
+
+Exclude rows that have missing data in ANY variable
+```{r, include=FALSE}
+# Exclude rows that have missing data in ANY variable
+Data_df_no_NA <- na.omit(data_sharedata_num)
+summary(Data_df_no_NA)
+nrow(Data_df_no_NA)
+```
+
+
+```{r}
+#Data_df_no_NA$chronicw9 %>% attr('labels')
+#Data_df_no_NA$sphus %>% attr('labels')
+
+df = Data_df_no_NA[!(Data_df_no_NA$sphus %in% "-2" ) ,]
+df = df[!(df$sphus %in% "-1" ) , ]
+
+#df =Data_df_no_NA[ !grepl("-2", df$sphus) , ]
+#df =df[ !grepl("-1", df$sphus) , ]
+
+df =df[ !grepl("-2", df$age_int) , ]
+df =df[ !grepl("-1", df$age_int) , ]
+df =df[ !grepl("-9", df$age_int) , ]
+
+
+df =df[ !grepl("-2", df$chronicw9) , ]
+df =df[ !grepl("-1", df$chronicw9) , ]
+
+
+df =df[ !grepl("-2", df$adl2) , ]
+df =df[ !grepl("-1", df$adl2) , ]
+
+df =df[ !grepl("-2", df$eurod) , ]
+df =df[ !grepl("-1", df$eurod) , ]
+
+df =df[ !grepl("-2", df$iadl2) , ]
+df =df[ !grepl("-1", df$iadl2) , ]
+
+df =df[ !grepl("95", df$isced1997_r ) , ]
+df =df[ !grepl("97", df$isced1997_r ) , ]
+df =df[ !grepl("-2", df$isced1997_r ) , ]
+df =df[ !grepl("-1", df$isced1997_r ) , ]
+
+
+
+
+
+#df =haven::as_factor(df)
+summary(df)
+str(df)
+```
+
+
+
+
+```{r}
+path_sharedata$age_int %>% attr('labels')
+path_sharedata$age_int %>% attr('labels')
+```
+
+
+##Self Rated Health
+The variable was based on  responses to the question ‘How is your health in general?’ (excellent; very good; good; fair; poor). Following common practice [23], the five possible answers were grouped into two categories: excellent, very good or good health (good health), and fair or poor health (poor health).
+```{r}
+path_sharedata$sphus %>% attr('labels')
+path_sharedata$adl2 %>% attr('labels')
+
+```
+
+```{r , include=FALSE}
+df$sphus <- as.factor(df$sphus)
+Data_df=df %>% 
+     mutate(sphus_new = recode(sphus, '1' = "Good health", '2' = "Good health", '3' = "Good health", '4' = "Poor health", '5' = "Poor health"))
+Data_df$sphus_new <- as.factor(Data_df$sphus_new)
+str(Data_df)
+
+#Data_df= data_sharedata_num %>% 
+#     mutate(sphu_new = recode(sphus, 'Excellent' = "Good health", 'Very good' = "Good health", 'Good' = #"Good health", 'Fair' = "Poor health", 'Poor' = "Poor health"))
+```
+
+##Chronic disease. 
+The SHARE questionnaire includes questions about 21 diagnosed chronic diseases and health conditions (heart attack or any other heart problem; high blood pressure or hypertension; high blood cholesterol; stroke or cerebral vascular disease; diabetes; chronic lung disease; cancer or malignant tumor; stomach or duodenal ulcer, peptic ulcer; Par kinson disease; cataracts; hip fracture; other frac tures; Alzheimer’s disease, dementia, organic brain syndrome, senility or any other serious memory impairment; other affective or emotional disorders; rheumatoid Arthritis; Osteoarthritis, or other rheu matism; and chronic kidney disease). Here, the final variable was dichotomized as no chronic disease and chronic disease (i.e., one or more diagnosed chronic diseases).
+
+```{r}
+path_sharedata$chronicw9 %>% attr('labels')
+
+Data_df= Data_df %>% 
+     mutate(chronicw9_new = recode(chronicw9, '0' = "No chronic disease", '1' = "Chronic disease", '2' = "Chronic disease", '3' = "Chronic disease", '4' = "Chronic disease",'5' = "Chronic disease",'6' = "Chronic disease",'7' = "Chronic disease",'8' = "Chronic disease",'9' = "Chronic disease",'10' = "Chronic disease",'11' = "Chronic disease",'12' = "Chronic disease",'13' = "Chronic disease",'14' = "Chronic disease",'15' = "Chronic disease"))
+
+Data_df$chronicw9_new <- as.factor(Data_df$chronicw9_new)
+
+
+```
+
+##Activities of daily living (ADL): 
+Participants were asked whether, “because of physical, mental, emotional, or memory problems”, they had any difficulty doing these activities (again, excluding any difficulties expected to last less than three months): dressing (including putting on shoes and socks); eating (such as cutting up your food); using the toilet (including getting up and down); bathing and showering; getting in and out of bed; and walking across a room. The final variable was dichotomized as no limitations and limited (having difficulties to perform one or more of the activities).
+
+```{r}
+path_sharedata$adl2 %>% attr('labels')
+
+Data_df= Data_df %>% 
+     mutate(adl2_new = recode(adl2, '0' = "No limitations", '1' = "Limited"))
+
+Data_df$adl2_new <- as.factor(Data_df$adl2_new)
+#str(Data_df)
+
+```
+
+
+##Instrumental activities of daily living (IADL).
+
+Participants were asked whether they had any difficulty doing each of the following everyday activities: doing work around the house or garden; leaving the house independently/accessing transportation; shopping for groceries; doing personal laundry; managing money; preparing a hot meal; taking medications; and making telephone calls. Individuals were required to exclude any difficulties expected to last less than three months. The final variable was dichotomized as no limitations and limited (having difficulties to per form one or more of the activities).
+```{r}
+path_sharedata$iadl2 %>% attr('labels')
+
+Data_df= Data_df %>% 
+     mutate(iadl2_new = recode(iadl2, '0' = "No limitations", '1' = "Limited"))
+
+Data_df$iadl2_new <- as.factor(Data_df$iadl2_new)
+```
+##Depression
+
+This variable was measured using the EURO-D scale, developed and validated by the EURODEP Concerted Action Project [20]. EURO D compiles binary information about 12 different symptoms of depressive moods: depression, pessimism, wishing death, guilt, sleep, interest, irritability, appetite, fatigue, concentration, enjoyment, and tearfulness [21]. The scale ranges from 0 to 12 with a score above 3 representing significant depression levels [22]. The final variable was dichotomized as not depressed (values of 3 or lower) and depressed (values above 3)
+
+```{r}
+path_sharedata$eurod %>% attr('labels')
+Data_df= Data_df %>% 
+     mutate(eurod_new = recode(eurod, '0' = "Not depressed", '1' = "Not depressed", '2' = "Not depressed", '3' = "Not depressed", '4' = "Depressed", '5' = "Depressed",'6' = "Depressed",'7' = "Depressed",'8' = "Depressed",'9' = "Depressed",'10' = "Depressed",'11' = "Depressed",'12' = "Depressed"))
+
+Data_df$eurod_new <- as.factor(Data_df$eurod_new)
+```
+
+##Education: 
+The original information was coded using the International Standard Classification of Education, that is, the ISCED 1997 scale, designed by UNESCO to facilitate cross-country comparisons. The original values were grouped as follows: low (corresponding to ISCED 0–2, lower secondary education or lower), medium (ISCED 3–4, higher secondary education), and high (ISCED 5–6, post-secondary education).
+
+```{r}
+path_sharedata$isced1997_r %>% attr('labels')
+
+Data_df= Data_df %>% 
+     mutate(isced1997_r_new = recode(isced1997_r, '0' = "Lower secondary education", '1' = "Lower secondary education",'2' = "Lower secondary education", '3' = "Higher secondary education",'4' = "Higher secondary education", '5' = "Post-secondary education",'6' = "Post-secondary education"))
+
+Data_df$isced1997_r_new <- as.factor(Data_df$isced1997_r_new)
+```
+
+##country
+```{r}
+df$country %>% attr('labels')
+
+Data_df$country_new <- as_factor(Data_df$country)
+
+table(df$country)
+
+
+table(Data_df$country_new)
+
+#Data_df= Data_df %>% 
+#  mutate(country_new = recode(country, '11' = "Austria", '12' = "Germany", '13' = #"Sweden",'14' = "Netherlands", '15' = "Spain", '16' = "Italy", '17' = "France", '18' = #"Denmark"))
+
+#Data_df$isced1997_r_new <- as.factor(Data_df$isced1997_r_new)
+```
+
+
+
+
+# Number of rows in full dataset
+```{r}
+
+
+# Number of rows in full dataset
+nrow(Data_df)
+```
+
+
+
+```{r}
+# Count how many rows have age less than 50
+num_less_than_50 <- sum(Data_df$age_int < 50)
+cat("Number of individuals with age < 50:", num_less_than_50, "\n")
+
+# Filter out rows where age is less than 50
+Data_df<- Data_df[Data_df$age_int >= 50, ]
+
+# Confirm number of rows after filtering
+cat("Number of rows after filtering:", nrow(Data_df), "\n")
+
+```
+
+
+
+```{r}
+# Create the "age_group" column based on the "age_int" column
+Data_df$age_group <- with(Data_df, ifelse(age_int >= 50 & age_int <= 64, "50-64",
+                      ifelse(age_int >= 65 & age_int <= 79, "65-79",
+                      ifelse(age_int >= 80, "80 and above", NA))))
+
+# View the first few rows to verify
+head(Data_df[c("age_int", "age_group")])
+```
+
+```{r}
+colnames(Data_df)
+
+
+drops = c('adl','adl2','chronic2w9','chronicw9','eurod','iadl','iadl2','sphus','sphus2','isced1997_r' )
+data =  Data_df[ , !(names(Data_df) %in% drops)]
+
+data_final =haven::as_factor(data)
+str(data_final)
+```
+
+
+```{r}
+
+table(data_final$country)
+# Remove rows where country is "Israel"
+data_final <- subset(data_final, country != "Israel")
+
+# Optional: Confirm Israel is removed
+table(data_final$country)
+```
+
+
+
+```{r}
+write.csv(data_final, "C:/Users/user/Desktop/selfratedML/data_final_16_5.csv")
+```
+
+
+
+```{r}
+#1
+# Filter for females aged 50-64 with Good health
+filtered1 <- subset(data_final, gender == "Female" & age_group == "50-64" & sphus_new == "Good health")
+
+# Count how many meet the condition
+count <- nrow(filtered1)
+
+# Total number of females aged 50-64
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 50-64 with Good health:", count , "\nPercentage of females aged 50-64 with Good health:", round(percentage, 2), "%\n")
+
+
+
+#2
+filtered2 <- subset(data_final, gender == "Female" & age_group == "65-79" & sphus_new == "Good health")
+
+
+count <- nrow(filtered2)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 65-79 with Good health:", count , "\nPercentage of females aged 65-79 with Good health:", round(percentage, 2), "%\n")
+
+#3
+
+filtered3 <- subset(data_final, gender == "Female" & age_group == "80 and above" & sphus_new == "Good health")
+
+
+count <- nrow(filtered3)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 80 and above with Good health:", count , "\nPercentage of females aged 80 and above with Good health:", round(percentage, 2), "%\n")
+
+
+
+#4
+
+filtered4 <- subset(data_final, gender == "Female" & age_group == "50-64" & sphus_new == "Poor health")
+
+# Count how many meet the condition
+count <- nrow(filtered4)
+
+# Total number of females aged 50-64
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 50-64 with Poor health:", count , "\nPercentage of females aged 50-64 with Poor health:", round(percentage, 2), "%\n")
+
+
+
+#5
+
+filtered5 <- subset(data_final, gender == "Female" & age_group == "65-79" & sphus_new == "Poor health")
+
+
+count <- nrow(filtered5)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 65-79 with Poor health:", count , "\nPercentage of females aged 65-79 with Poor health:", round(percentage, 2), "%\n")
+
+#6
+
+filtered6 <- subset(data_final, gender == "Female" & age_group == "80 and above" & sphus_new == "Poor health")
+
+
+count <- nrow(filtered6)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 80 and above with Poor health:", count , "\nPercentage of females aged 80 and above with Poor health:", round(percentage, 2), "%\n")
+
+
+
+
+#Males
+
+#7
+# Filter for Males aged 50-64 with Good health
+filtered7 <- subset(data_final, gender == "Male" & age_group == "50-64" & sphus_new == "Good health")
+
+# Count how many meet the condition
+count <- nrow(filtered7)
+
+# Total number of females aged 50-64
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 50-64 with Good health:", count , "\nPercentage of Male aged 50-64 with Good health:", round(percentage, 2), "%\n")
+
+
+
+#8
+filtered8 <- subset(data_final, gender == "Male" & age_group == "65-79" & sphus_new == "Good health")
+
+
+count <- nrow(filtered8)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 65-79 with Good health:", count , "\nPercentage of Male aged 65-79 with Good health:", round(percentage, 2), "%\n")
+
+#9
+
+filtered9 <- subset(data_final, gender == "Male" & age_group == "80 and above" & sphus_new == "Good health")
+
+
+count <- nrow(filtered9)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 80 and above with Good health:", count , "\nPercentage of Male aged 80 and above with Good health:", round(percentage, 2), "%\n")
+
+
+
+#10
+
+filtered10 <- subset(data_final, gender == "Male" & age_group == "50-64" & sphus_new == "Poor health")
+
+# Count how many meet the condition
+count <- nrow(filtered10)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 50-64 with Poor health:", count , "\nPercentage of Male aged 50-64 with Poor health:", round(percentage, 2), "%\n")
+
+
+
+#11
+
+filtered11 <- subset(data_final, gender == "Male" & age_group == "65-79" & sphus_new == "Poor health")
+
+
+count <- nrow(filtered11)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 65-79 with Poor health:", count , "\nPercentage of Male aged 65-79 with Poor health:", round(percentage, 2), "%\n")
+
+#12
+
+filtered12 <- subset(data_final, gender == "Male" & age_group == "80 and above" & sphus_new == "Poor health")
+
+
+count <- nrow(filtered12)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 80 and above with Poor health:", count , "\nPercentage of Male aged 80 and above with Poor health:", round(percentage, 2), "%\n")
+
+
+```
+
+```{r}
+#13
+# Filter for females aged 50-64 with Good health
+filtered13 <- subset(data_final, gender == "Female" & age_group == "50-64" & chronicw9_new == "Chronic disease")
+
+# Count how many meet the condition
+count <- nrow(filtered13)
+
+# Total number of females aged 50-64
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 50-64 with Chronic disease:", count , "\nPercentage of females aged 50-64 with Chronic disease:", round(percentage, 2), "%\n")
+
+
+
+#14
+filtered14 <- subset(data_final, gender == "Female" & age_group == "65-79" & chronicw9_new == "Chronic disease")
+
+
+count <- nrow(filtered14)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 65-79 with Chronic disease:", count , "\nPercentage of females aged 65-79 with Chronic disease:", round(percentage, 2), "%\n")
+
+#15
+
+filtered15 <- subset(data_final, gender == "Female" & age_group == "80 and above" & chronicw9_new == "Chronic disease")
+
+
+count <- nrow(filtered15)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 80 and above with Chronic disease:", count , "\nPercentage of females aged 80 and above with Chronic disease:", round(percentage, 2), "%\n")
+
+
+
+#16
+
+filtered16 <- subset(data_final, gender == "Female" & age_group == "50-64" & chronicw9_new == "No chronic disease")
+
+# Count how many meet the condition
+count <- nrow(filtered16)
+
+# Total number of females aged 50-64
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 50-64 with  No chronic disease:", count , "\nPercentage of females aged 50-64 with No chronic disease:", round(percentage, 2), "%\n")
+
+
+
+#17
+
+filtered17 <- subset(data_final, gender == "Female" & age_group == "65-79" & chronicw9_new == "No chronic disease")
+
+
+count <- nrow(filtered17)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 65-79 with No chronic disease:", count , "\nPercentage of females aged 65-79 with No chronic disease:", round(percentage, 2), "%\n")
+
+#18
+
+filtered18 <- subset(data_final, gender == "Female" & age_group == "80 and above" & chronicw9_new == "No chronic disease")
+
+
+count <- nrow(filtered18)
+
+
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count females aged 80 and above with No chronic disease:", count , "\nPercentage of females aged 80 and above with No chronic disease:", round(percentage, 2), "%\n")
+
+
+
+
+#Males
+
+#19
+
+filtered19 <- subset(data_final, gender == "Male" & age_group == "50-64" & chronicw9_new == "Chronic disease")
+
+# Count how many meet the condition
+count <- nrow(filtered19)
+
+# Total number of females aged 50-64
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 50-64 with Chronic disease:", count , "\nPercentage of Male aged 50-64 with Chronic disease:", round(percentage, 2), "%\n")
+
+
+
+#20
+filtered20 <- subset(data_final, gender == "Male" & age_group == "65-79" & chronicw9_new == "Chronic disease")
+
+
+count <- nrow(filtered20)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 65-79 with Chronic disease:", count , "\nPercentage of Male aged 65-79 with Chronic disease:", round(percentage, 2), "%\n")
+
+#21
+
+filtered21 <- subset(data_final, gender == "Male" & age_group == "80 and above" & chronicw9_new == "Chronic disease")
+
+
+count <- nrow(filtered21)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 80 and above with Chronic disease:", count , "\nPercentage of Male aged 80 and above with Chronic disease:", round(percentage, 2), "%\n")
+
+
+
+#22
+
+filtered22 <- subset(data_final, gender == "Male" & age_group == "50-64" & chronicw9_new == "No chronic disease")
+
+# Count how many meet the condition
+count <- nrow(filtered22)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+
+# Calculate percentage
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 50-64 with No chronic disease:", count , "\nPercentage of Male aged 50-64 with No chronic disease:", round(percentage, 2), "%\n")
+
+
+
+#23
+
+filtered23 <- subset(data_final, gender == "Male" & age_group == "65-79" & chronicw9_new == "No chronic disease")
+
+
+count <- nrow(filtered23)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 65-79 with No chronic disease:", count , "\nPercentage of Male aged 65-79 with No chronic disease:", round(percentage, 2), "%\n")
+
+#24
+
+filtered24 <- subset(data_final, gender == "Male" & age_group == "80 and above" & chronicw9_new == "No chronic disease")
+
+
+count <- nrow(filtered24)
+
+
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+
+
+percentage <- (count / total) * 100
+
+# Output result
+cat("Count Male aged 80 and above with No chronic disease:", count , "\nPercentage of Male aged 80 and above with No chronic disease:", round(percentage, 2), "%\n")
+
+```
+
+
+```{r}
+#25
+filtered25 <- subset(data_final, gender == "Female" & age_group == "50-64" & eurod_new == "Depressed")
+count <- nrow(filtered25)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Depressed:", count , "\nPercentage of females aged 50-64 with Depressed:", round(percentage, 2), "%\n")
+
+#26
+filtered26 <- subset(data_final, gender == "Female" & age_group == "65-79" & eurod_new == "Depressed")
+count <- nrow(filtered26)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Depressed:", count , "\nPercentage of females aged 65-79 with Depressed:", round(percentage, 2), "%\n")
+
+#27
+filtered27 <- subset(data_final, gender == "Female" & age_group == "80 and above" & eurod_new == "Depressed")
+count <- nrow(filtered27)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Depressed:", count , "\nPercentage of females aged 80 and above with Depressed:", round(percentage, 2), "%\n")
+
+#28
+filtered28 <- subset(data_final, gender == "Female" & age_group == "50-64" & eurod_new == "Not depressed")
+count <- nrow(filtered28)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Not depressed:", count , "\nPercentage of females aged 50-64 with Not depressed:", round(percentage, 2), "%\n")
+
+#29
+filtered29 <- subset(data_final, gender == "Female" & age_group == "65-79" & eurod_new == "Not depressed")
+count <- nrow(filtered29)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Not depressed:", count , "\nPercentage of females aged 65-79 with Not depressed:", round(percentage, 2), "%\n")
+
+#30
+filtered30 <- subset(data_final, gender == "Female" & age_group == "80 and above" & eurod_new == "Not depressed")
+count <- nrow(filtered30)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Not depressed:", count , "\nPercentage of females aged 80 and above with Not depressed:", round(percentage, 2), "%\n")
+
+#31
+filtered31 <- subset(data_final, gender == "Male" & age_group == "50-64" & eurod_new == "Depressed")
+count <- nrow(filtered31)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Depressed:", count , "\nPercentage of Male aged 50-64 with Depressed:", round(percentage, 2), "%\n")
+
+#32
+filtered32 <- subset(data_final, gender == "Male" & age_group == "65-79" & eurod_new == "Depressed")
+count <- nrow(filtered32)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Depressed:", count , "\nPercentage of Male aged 65-79 with Depressed:", round(percentage, 2), "%\n")
+
+#33
+filtered33 <- subset(data_final, gender == "Male" & age_group == "80 and above" & eurod_new == "Depressed")
+count <- nrow(filtered33)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Depressed:", count , "\nPercentage of Male aged 80 and above with Depressed:", round(percentage, 2), "%\n")
+
+#34
+filtered34 <- subset(data_final, gender == "Male" & age_group == "50-64" & eurod_new == "Not depressed")
+count <- nrow(filtered34)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Not depressed:", count , "\nPercentage of Male aged 50-64 with Not depressed:", round(percentage, 2), "%\n")
+
+#35
+filtered35 <- subset(data_final, gender == "Male" & age_group == "65-79" & eurod_new == "Not depressed")
+count <- nrow(filtered35)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Not depressed:", count , "\nPercentage of Male aged 65-79 with Not depressed:", round(percentage, 2), "%\n")
+
+#36
+filtered36 <- subset(data_final, gender == "Male" & age_group == "80 and above" & eurod_new == "Not depressed")
+count <- nrow(filtered36)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Not depressed:", count , "\nPercentage of Male aged 80 and above with Not depressed:", round(percentage, 2), "%\n")
+
+```
+```{r}
+#37
+filtered37 <- subset(data_final, gender == "Female" & age_group == "50-64" & adl2_new == "Limited")
+count <- nrow(filtered37)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Limited:", count , "\nPercentage of females aged 50-64 with Limited:", round(percentage, 2), "%\n")
+
+#38
+filtered38 <- subset(data_final, gender == "Female" & age_group == "65-79" & adl2_new == "Limited")
+count <- nrow(filtered38)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Limited:", count , "\nPercentage of females aged 65-79 with Limited:", round(percentage, 2), "%\n")
+
+#39
+filtered39 <- subset(data_final, gender == "Female" & age_group == "80 and above" & adl2_new == "Limited")
+count <- nrow(filtered39)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Limited:", count , "\nPercentage of females aged 80 and above with Limited:", round(percentage, 2), "%\n")
+
+#40
+filtered40 <- subset(data_final, gender == "Female" & age_group == "50-64" & adl2_new == "No limitations")
+count <- nrow(filtered40)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with No limitations:", count , "\nPercentage of females aged 50-64 with No limitations:", round(percentage, 2), "%\n")
+
+#41
+filtered41 <- subset(data_final, gender == "Female" & age_group == "65-79" & adl2_new == "No limitations")
+count <- nrow(filtered41)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with No limitations:", count , "\nPercentage of females aged 65-79 with No limitations:", round(percentage, 2), "%\n")
+
+#42
+filtered42 <- subset(data_final, gender == "Female" & age_group == "80 and above" & adl2_new == "No limitations")
+count <- nrow(filtered42)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with No limitations:", count , "\nPercentage of females aged 80 and above with No limitations:", round(percentage, 2), "%\n")
+
+#43
+filtered43 <- subset(data_final, gender == "Male" & age_group == "50-64" & adl2_new == "Limited")
+count <- nrow(filtered43)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Limited:", count , "\nPercentage of Male aged 50-64 with Limited:", round(percentage, 2), "%\n")
+
+#44
+filtered44 <- subset(data_final, gender == "Male" & age_group == "65-79" & adl2_new == "Limited")
+count <- nrow(filtered44)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Limited:", count , "\nPercentage of Male aged 65-79 with Limited:", round(percentage, 2), "%\n")
+
+#45
+filtered45 <- subset(data_final, gender == "Male" & age_group == "80 and above" & adl2_new == "Limited")
+count <- nrow(filtered45)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Limited:", count , "\nPercentage of Male aged 80 and above with Limited:", round(percentage, 2), "%\n")
+
+#46
+filtered46 <- subset(data_final, gender == "Male" & age_group == "50-64" & adl2_new == "No limitations")
+count <- nrow(filtered46)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with No limitations:", count , "\nPercentage of Male aged 50-64 with No limitations:", round(percentage, 2), "%\n")
+
+#47
+filtered47 <- subset(data_final, gender == "Male" & age_group == "65-79" & adl2_new == "No limitations")
+count <- nrow(filtered47)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with No limitations:", count , "\nPercentage of Male aged 65-79 with No limitations:", round(percentage, 2), "%\n")
+
+#48
+filtered48 <- subset(data_final, gender == "Male" & age_group == "80 and above" & adl2_new == "No limitations")
+count <- nrow(filtered48)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with No limitations:", count , "\nPercentage of Male aged 80 and above with No limitations:", round(percentage, 2), "%\n")
+
+```
+
+```{r}
+#49
+filtered49 <- subset(data_final, gender == "Female" & age_group == "50-64" & iadl2_new == "Limited")
+count <- nrow(filtered49)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Limited iadl:", count , "\nPercentage of females aged 50-64 with Limited iadl:", round(percentage, 2), "%\n")
+
+#50
+filtered50 <- subset(data_final, gender == "Female" & age_group == "65-79" & iadl2_new == "Limited")
+count <- nrow(filtered50)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Limited iadl:", count , "\nPercentage of females aged 65-79 with Limited iadl:", round(percentage, 2), "%\n")
+
+#51
+filtered51 <- subset(data_final, gender == "Female" & age_group == "80 and above" & iadl2_new == "Limited")
+count <- nrow(filtered51)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Limited iadl:", count , "\nPercentage of females aged 80 and above with Limited iadl:", round(percentage, 2), "%\n")
+
+#52
+filtered52 <- subset(data_final, gender == "Female" & age_group == "50-64" & iadl2_new == "No limitations")
+count <- nrow(filtered52)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with No limitations in iadl:", count , "\nPercentage of females aged 50-64 with No limitations in iadl:", round(percentage, 2), "%\n")
+
+#53
+filtered53 <- subset(data_final, gender == "Female" & age_group == "65-79" & iadl2_new == "No limitations")
+count <- nrow(filtered53)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with No limitations in iadl:", count , "\nPercentage of females aged 65-79 with No limitations in iadl:", round(percentage, 2), "%\n")
+
+#54
+filtered54 <- subset(data_final, gender == "Female" & age_group == "80 and above" & iadl2_new == "No limitations")
+count <- nrow(filtered54)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with No limitations in iadl:", count , "\nPercentage of females aged 80 and above with No limitations in iadl:", round(percentage, 2), "%\n")
+
+#55
+filtered55 <- subset(data_final, gender == "Male" & age_group == "50-64" & iadl2_new == "Limited")
+count <- nrow(filtered55)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Limited iadl:", count , "\nPercentage of Male aged 50-64 with Limited iadl:", round(percentage, 2), "%\n")
+
+#56
+filtered56 <- subset(data_final, gender == "Male" & age_group == "65-79" & iadl2_new == "Limited")
+count <- nrow(filtered56)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Limited iadl:", count , "\nPercentage of Male aged 65-79 with Limited iadl:", round(percentage, 2), "%\n")
+
+#57
+filtered57 <- subset(data_final, gender == "Male" & age_group == "80 and above" & iadl2_new == "Limited")
+count <- nrow(filtered57)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Limited iadl:", count , "\nPercentage of Male aged 80 and above with Limited iadl:", round(percentage, 2), "%\n")
+
+#58
+filtered58 <- subset(data_final, gender == "Male" & age_group == "50-64" & iadl2_new == "No limitations")
+count <- nrow(filtered58)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with No limitations in iadl:", count , "\nPercentage of Male aged 50-64 with No limitations in iadl:", round(percentage, 2), "%\n")
+
+#59
+filtered59 <- subset(data_final, gender == "Male" & age_group == "65-79" & iadl2_new == "No limitations")
+count <- nrow(filtered59)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with No limitations in iadl:", count , "\nPercentage of Male aged 65-79 with No limitations in iadl:", round(percentage, 2), "%\n")
+
+#60
+filtered60 <- subset(data_final, gender == "Male" & age_group == "80 and above" & iadl2_new == "No limitations")
+count <- nrow(filtered60)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with No limitations in iadl:", count , "\nPercentage of Male aged 80 and above with No limitations in iadl:", round(percentage, 2), "%\n")
+
+```
+
+```{r}
+#61
+filtered61 <- subset(data_final, gender == "Female" & age_group == "50-64" & isced1997_r_new == "Lower secondary education")
+count <- nrow(filtered61)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Lower secondary education:", count , "\nPercentage of females aged 50-64 with Lower secondary education:", round(percentage, 2), "%\n")
+
+#62
+filtered62 <- subset(data_final, gender == "Female" & age_group == "65-79" & isced1997_r_new == "Lower secondary education")
+count <- nrow(filtered62)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Lower secondary education:", count , "\nPercentage of females aged 65-79 with Lower secondary education:", round(percentage, 2), "%\n")
+
+#63
+filtered63 <- subset(data_final, gender == "Female" & age_group == "80 and above" & isced1997_r_new == "Lower secondary education")
+count <- nrow(filtered63)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Lower secondary education:", count , "\nPercentage of females aged 80 and above with Lower secondary education:", round(percentage, 2), "%\n")
+
+#64
+filtered64 <- subset(data_final, gender == "Female" & age_group == "50-64" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered64)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Higher secondary education:", count , "\nPercentage of females aged 50-64 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#65
+filtered65 <- subset(data_final, gender == "Female" & age_group == "65-79" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered65)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Higher secondary education:", count , "\nPercentage of females aged 65-79 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#66
+filtered66 <- subset(data_final, gender == "Female" & age_group == "80 and above" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered66)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Higher secondary education:", count , "\nPercentage of females aged 80 and above with Higher secondary education:", round(percentage, 2), "%\n")
+
+#67
+filtered67 <- subset(data_final, gender == "Male" & age_group == "50-64" & isced1997_r_new == "Lower secondary education")
+count <- nrow(filtered67)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Lower secondary education:", count , "\nPercentage of Male aged 50-64 with Lower secondary education:", round(percentage, 2), "%\n")
+
+#68
+filtered68 <- subset(data_final, gender == "Male" & age_group == "65-79" & isced1997_r_new == "Lower secondary education")
+count <- nrow(filtered68)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Lower secondary education:", count , "\nPercentage of Male aged 65-79 with Lower secondary education:", round(percentage, 2), "%\n")
+
+#69
+filtered69 <- subset(data_final, gender == "Male" & age_group == "80 and above" & isced1997_r_new == "Lower secondary education")
+count <- nrow(filtered69)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Lower secondary education:", count , "\nPercentage of Male aged 80 and above with Lower secondary education:", round(percentage, 2), "%\n")
+
+#70
+filtered70 <- subset(data_final, gender == "Male" & age_group == "50-64" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered70)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Higher secondary education:", count , "\nPercentage of Male aged 50-64 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#71
+filtered71 <- subset(data_final, gender == "Male" & age_group == "65-79" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered71)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Higher secondary education:", count , "\nPercentage of Male aged 65-79 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#72
+filtered72 <- subset(data_final, gender == "Male" & age_group == "80 and above" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered72)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Higher secondary education:", count , "\nPercentage of Male aged 80 and above with Higher secondary education:", round(percentage, 2), "%\n")
+
+```
+
+
+```{r}
+#73
+filtered73 <- subset(data_final, gender == "Female" & age_group == "50-64" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered73)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Higher secondary education:", count , "\nPercentage of females aged 50-64 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#74
+filtered74 <- subset(data_final, gender == "Female" & age_group == "65-79" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered74)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Higher secondary education:", count , "\nPercentage of females aged 65-79 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#75
+filtered75 <- subset(data_final, gender == "Female" & age_group == "80 and above" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered75)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Higher secondary education:", count , "\nPercentage of females aged 80 and above with Higher secondary education:", round(percentage, 2), "%\n")
+
+#76
+filtered76 <- subset(data_final, gender == "Female" & age_group == "50-64" & isced1997_r_new == "Post-secondary education")
+count <- nrow(filtered76)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count females aged 50-64 with Post-secondary education:", count , "\nPercentage of females aged 50-64 with Post-secondary education:", round(percentage, 2), "%\n")
+
+#77
+filtered77 <- subset(data_final, gender == "Female" & age_group == "65-79" & isced1997_r_new == "Post-secondary education")
+count <- nrow(filtered77)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count females aged 65-79 with Post-secondary education:", count , "\nPercentage of females aged 65-79 with Post-secondary education:", round(percentage, 2), "%\n")
+
+#78
+filtered78 <- subset(data_final, gender == "Female" & age_group == "80 and above" & isced1997_r_new == "Post-secondary education")
+count <- nrow(filtered78)
+total <- nrow(subset(data_final, gender == "Female" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count females aged 80 and above with Post-secondary education:", count , "\nPercentage of females aged 80 and above with Post-secondary education:", round(percentage, 2), "%\n")
+
+#79
+filtered79 <- subset(data_final, gender == "Male" & age_group == "50-64" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered79)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Higher secondary education:", count , "\nPercentage of Male aged 50-64 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#80
+filtered80 <- subset(data_final, gender == "Male" & age_group == "65-79" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered80)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Higher secondary education:", count , "\nPercentage of Male aged 65-79 with Higher secondary education:", round(percentage, 2), "%\n")
+
+#81
+filtered81 <- subset(data_final, gender == "Male" & age_group == "80 and above" & isced1997_r_new == "Higher secondary education")
+count <- nrow(filtered81)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Higher secondary education:", count , "\nPercentage of Male aged 80 and above with Higher secondary education:", round(percentage, 2), "%\n")
+
+#82
+filtered82 <- subset(data_final, gender == "Male" & age_group == "50-64" & isced1997_r_new == "Post-secondary education")
+count <- nrow(filtered82)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "50-64"))
+percentage <- (count / total) * 100
+cat("Count Male aged 50-64 with Post-secondary education:", count , "\nPercentage of Male aged 50-64 with Post-secondary education:", round(percentage, 2), "%\n")
+
+#83
+filtered83 <- subset(data_final, gender == "Male" & age_group == "65-79" & isced1997_r_new == "Post-secondary education")
+count <- nrow(filtered83)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "65-79"))
+percentage <- (count / total) * 100
+cat("Count Male aged 65-79 with Post-secondary education:", count , "\nPercentage of Male aged 65-79 with Post-secondary education:", round(percentage, 2), "%\n")
+
+#84
+filtered84 <- subset(data_final, gender == "Male" & age_group == "80 and above" & isced1997_r_new == "Post-secondary education")
+count <- nrow(filtered84)
+total <- nrow(subset(data_final, gender == "Male" & age_group == "80 and above"))
+percentage <- (count / total) * 100
+cat("Count Male aged 80 and above with Post-secondary education:", count , "\nPercentage of Male aged 80 and above with Post-secondary education:", round(percentage, 2), "%\n")
+
+```
+
+
+##Modeling
+Before proceeding with modeling,  need to split dataset into training and testing subsets. 
+
+splits the data randomly in a 70:30 ratio. 
+
+```{r}
+summary(data_final)
+# Exclude rows that have missing data in ANY variable
+data_final_no_NA <- na.omit(data_final)
+summary(data_final_no_NA)
+nrow(data_final)
+
+sample_split = sample.split(Y = data_final$sphus_new, SplitRatio = 0.8)
+train_set = subset(x = data_final, sample_split == TRUE)
+test_set = subset(x = data_final, sample_split == FALSE)
+```
+
+
+train the model on the training set. 
+R uses the glm() function to apply logistic regression. T
+specify family = "binomial", as this is required for logistic regression:
+
+```{r}
+logistic <- glm(sphus_new ~ chronicw9_new + gender+ age_group  + adl2_new +  iadl2_new + eurod_new + isced1997_r_new , data = train_set, family = "binomial", na.action = na.omit)
+summary(logistic)
+```
+
+The most interesting thing here is the P-values, displayed in the Pr(>|t|) column. Those values indicate the probability of a variable not being important for prediction. It’s common to use a 5% significance threshold, so if a P-value is 0.05 or below, we can say that there’s a low chance it is not significant for the analysis.
+
+Explore feature importances explicitly, with the varImp() function. Here’s how to obtain the most important features, sorted:
+
+
+
+
+```{r}
+importances <- varImp(logistic)
+
+importances %>%
+  arrange(desc(Overall)) %>%
+  top_n(6)
+```
+
+The most common way of evaluating machine learning models is by examining the confusion matrix. It’s a square matrix showing you how many predictions were correct (true positives and true negatives), how many were negative but classified as positive (false positives), and how many were positive but classified as negative (false negatives). In our case, positive refers to a passenger who survived the accident.
+
+The snippet below shows how to obtain probabilities and classes, and how to print the confusion matrix:
+```{r}
+probs <- predict(logistic, newdata = test_set, type = "response")
+pred <- ifelse(probs > 0.5, 1, 0)
+marriagePredictions <- ifelse(probs > 0.5, "Yes", "No")
+table(probs, test_set$sphus_new)
+#confusionMatrix(factor(pred), factor(test_set$sphus_new), positive = as.character(1))
+```
+```{r}
+fittedSamplesTrain=predict(logistic, newdata=train_set, type="response")
+fittedGenderTrain=ifelse(fittedSamplesTrain<0.5,"Good health","Poor health" )
+ConfMatTrain=table(train_set$sphus_new,fittedGenderTrain)
+TrainAccuracy=(ConfMatTrain[1,1]+ConfMatTrain[2,2])/sum(ConfMatTrain)
+TrainTPR=72/(72+11)
+TrainFPR=10/(10+79)
+
+print(cbind(TrainAccuracy, TrainTPR, TrainFPR))
+```
+Above we derived three statistics related to the performance of our model on the training data. The three statistics are
+
+overall accuracy
+true positive rate (TPR)
+false positive rate (FPR)
+
+True positive rate (TPR) and false positive rate (FPR). These can be expressed in Sensitivity and Specificity as well, where the relaions are very simple:
+Sensitivity=true positive rate
+Specificity=1−false postive rate=true negative rate
+In our example, TPR is 86.75%
+. That is, the model is able to pick up 86.75%
+ of the "Good health" correctly. Our FPR is 11.23%
+ of all the poor heath were detected to be good health, falsely.
+
+The above statics are for our training data. We can make such model that could be work perfectly in our training set, but the performance would drastically be deteriorated in the test set. This can happen when we increase the complexity of the model, that tries hard to fit the training data. But what we really want, that our model performance should not deviate seriously in the test or hold out data. Let us have a look how good we are with our model in the test set:
+
+
+
+```{r}
+fittedSamplesTest=predict(logistic, newdata=test_set, type="response")
+fittedGenderTest=ifelse(fittedSamplesTest<0.5,"Good health","Poor health" )
+ConfMatTest=table(test_set$sphus_new,fittedGenderTest)
+TestAccuracy=(ConfMatTest[1,1]+ConfMatTest[2,2])/sum(ConfMatTest)
+TestTPR=45/(45+10)
+TestFPR=1-52/(52+7) ## expressed as 1-true negative rate
+
+print(cbind(TestAccuracy, TestTPR, TestFPR))
+```
+
+```
+
+```{r}
+#compute SVM for a grid values of C and choose automatically the final model for predictions:
+# Fit the model 
+svm2 = train(sphus_new ~ chronicw9_new + age_group + partnerinhh + adl2_new +  iadl2_new + eurod_new + isced1997_r_new, data = train_set,  na.action = na.omit, method = "svmLinear", trControl = train_control,  preProcess = c("center","scale"), tuneGrid = expand.grid(C = seq(0, 2, length = 20)))
+#View the model
+svm2
+```
+
+```{r}
+# Plot model accuracy vs different values of Cost
+plot(svm2)
+```
+
+```{r}
+# Print the best tuning parameter C that maximizes model accuracy
+svm2$bestTune
+```
+
+```{r}
+res2<-as_tibble(svm2$results[which.min(svm2$results[,2]),])
+res2
+```
+
+#SVM classifier using Non-Linear Kernel
+To build a non-linear SVM classifier, we can use either polynomial kernel or radial kernel function. Again, the caret package can be used to easily computes the polynomial and the radial SVM non-linear models.
+
+The package automatically choose the optimal values for the model tuning parameters, where optimal is defined as values that maximize the model accuracy.
+method = "cv": Specifies 10-fold cross-validation.
+tuneGrid: Defines the grid of parameters to search through.
+svmRadial: Specifies that you’re using an SVM with an RBF kernel
+
+
+
+Using the caret package, you can easily perform cross-validation to tune your SVM model:
+```{r}
+# Load the caret package
+library(caret)
+
+# Define a grid of parameters to search
+# <- expand.grid(.C = c(0.1, 1, 10), .gamma = c(0.5, 1))
+
+# Train the model using cross-validation
+# without tuneGrid
+svm_tuned = train(sphus_new ~ chronicw9_new  + adl2_new +  iadl2_new + eurod_new + isced1997_r_new, na.action = na.omit, data = train_set, method = "svmRadial",
+                   trControl = trainControl(method = "cv", number = 10),
+                   preProcess = c("center", "scale"))
+
+# Best parameters
+svm_tuned$bestTune
+
+
+#View the model
+svm_tuned
+
+```
+```{r}
+# Fit the model 
+train_control <- trainControl(method="repeatedcv", number=10, repeats=3)
+svm_tuned2 = train(sphus_new ~ chronicw9_new  + adl2_new +  iadl2_new + eurod_new + isced1997_r_new, na.action = na.omit, data = train_set, method = "svmRadial", trControl = train_control, preProcess = c("center","scale"), tuneLength = 10)
+# Print the best tuning parameter sigma and C that maximizes model accuracy
+svm_tuned2$bestTune
+
+#View the model
+svm_tuned2
+```
+
+```{r}
+#save the results for later
+res3<-as_tibble(svm_tuned2$results[which.min(svm_tuned2$results[,2]),])
+res3
+```
+
+
+```{r}
+#Computing SVM using polynomial basis kernel:
+
+# Fit the model 
+#train_control <- trainControl(method="repeatedcv", number=10, repeats=3)
+#svm4 <- train(sphus_new ~ chronicw9_new  + adl2_new +  iadl2_new + eurod_new + #isced1997_r_new, na.action = na.omit, data = train_set, method = "svmPoly", trControl = $train_control, preProcess = c("center","scale"), tuneLength = 4)
+# Print the best tuning parameter sigma and C that maximizes model accuracy
+#svm4$bestTune
+```
+
+```{r}
+#View the model
+#svm4
+```
+
+
+```{r}
+#save the results for later
+#res4<-as_tibble(svm4$results[which.min(svm4$results[,2]),])
+#res4
+```
+
+```{r}
+#df<-tibble(Model=c('SVM Linear','SVM Linear w/ choice of cost','SVM Radial','SVM #Poly'),Accuracy=c(svm1$results[2][[1]],res2$Accuracy,res3$Accuracy,res4$Accuracy))
+#df %>% arrange(Accuracy)
+```
+
+
+
+```{r}
+# Load libraries
+library(caret)
+library(tidyverse)
+library(e1071)
+library(randomForest)
+library(xgboost)
+library(kernlab)
+library(naivebayes)
+library(class)
+library(pROC)
+library(MLmetrics)
+library(vip)
+library(ggplot2)
+
+
+df <- data_final
+# Replace this line with your actual dataframe
+
+# Ensure target is a factor
+df$sphus_new <- as.factor(df$sphus_new)
+
+# Train/test split
+set.seed(123)
+trainIndex <- createDataPartition(df$sphus_new, p = 0.8, list = FALSE)
+trainData <- df[trainIndex, ]
+testData <- df[-trainIndex, ]
+
+# Define formula
+formula <- sphus_new ~ chronicw9_new + adl2_new + iadl2_new + eurod_new + isced1997_r_new
+
+# Preprocessing
+preProc <- preProcess(trainData, method = c("center", "scale"))
+trainData <- predict(preProc, trainData)
+testData <- predict(preProc, testData)
+
+# Setup train control
+ctrl <- trainControl(method = "cv", number = 5,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE,
+                     savePredictions = TRUE)
+
+
+
+# Rename levels to match caret expectations
+levels(trainData$sphus_new) <- make.names(levels(trainData$sphus_new))
+levels(testData$sphus_new) <- make.names(levels(testData$sphus_new))
+
+# Model list to hold results
+models <- list()
+performances <- data.frame()
+
+# 1. Logistic Regression
+models$log_reg <- train(formula, data = trainData, method = "glm", family = "binomial", trControl = ctrl, metric = "Accuracy")
+
+# 2. Random Forest
+models$rf <- train(formula, data = trainData, method = "rf", trControl = ctrl, tuneLength = 5, metric = "Accuracy")
+
+# 3. Support Vector Machine
+models$svm <- train(formula, data = trainData, method = "svmRadial", trControl = ctrl, tuneLength = 5, metric = "Accuracy")
+
+# 4. Extreme Gradient Boosting (XGBoost)
+train_matrix <- model.matrix(formula, trainData)[,-1]
+label <- ifelse(trainData$sphus_new == "X1", 1, 0)
+dtrain <- xgb.DMatrix(data = train_matrix, label = label)
+
+params <- list(objective = "binary:logistic", eval_metric = "logloss")
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 100)
+
+# For prediction on test set
+test_matrix <- model.matrix(formula, testData)[,-1]
+xgb_preds_prob <- predict(xgb_model, test_matrix)
+xgb_preds <- ifelse(xgb_preds_prob > 0.5, "X1", "X0")
+
+# 5. Naive Bayes
+models$nb <- train(formula, data = trainData, method = "naive_bayes", trControl = ctrl, tuneLength = 5, metric = "Accuracy")
+
+
+```
+
+
+```{r}
+library(caret)
+glimpse(df)
+param_preproc_df <- preProcess(df[,2:9], method = c("scale", "center"))
+df_stdize <- predict(param_preproc_df, df[, 2:9])
+
+summary(df_stdize)
+```
+
+```{r}
+dataset <- na.omit(df)
+
+
+dataset$sphus_new <- factor(dataset$sphus_new, levels = c("Good health", "Poor health"))
+str(dataset)
+trainControl <- trainControl(method="repeatedcv", number=10, repeats=3)
+metric <- "Accuracy"
+
+
+
+
+# 6. k-Nearest Neighbors
+#models$knn
+
+fit.knn<- train(formula, data = trainData, method = "knn", trControl = trainControl, tuneLength = 10, na.action = na.omit, metric = metric)
+
+
+knn.k1 <- fit.knn$bestTune # keep this Initial k for testing with knn() function in next section
+print(fit.knn)
+
+
+
+
+```
+
